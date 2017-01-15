@@ -1041,6 +1041,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( bWasKeyword )
 					continue;
+				sphWarn("m_pTokenizer->GetTokenStart() [ -1 ]=%c",m_pTokenizer->GetTokenStart() [ -1 ]);
 				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
 					continue;
 

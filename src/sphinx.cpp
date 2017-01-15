@@ -163,7 +163,7 @@ static bool sphTruncate ( int iFD );
 // GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
-const char *		SPHINX_DEFAULT_UTF8_TABLE	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451";
+const char *		SPHINX_DEFAULT_UTF8_TABLE_2	= "0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451";
 
 const char *		MAGIC_WORD_SENTENCE		= "\3sentence";		// emitted from source on sentence boundary, stored in dictionary
 const char *		MAGIC_WORD_PARAGRAPH	= "\3paragraph";	// emitted from source on paragraph boundary, stored in dictionary
@@ -331,7 +331,6 @@ static int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 	int64_t tmStart = 0;
 	if ( pIOStats )
 		tmStart = sphMicroTimer();
-
 	int64_t iRead = ::read ( iFD, pBuf, iCount );
 
 	if ( pIOStats )
@@ -1162,6 +1161,8 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 
 const char* CheckFmtMagic ( DWORD uHeader )
 {
+	fprintf(stdout,"check fmt dword=%lx",uHeader);
+	fflush(stdout);
 	if ( uHeader!=INDEX_MAGIC_HEADER )
 	{
 		FlipEndianess ( &uHeader );
@@ -4758,7 +4759,7 @@ template < bool IS_QUERY >
 CSphTokenizer_UTF8<IS_QUERY>::CSphTokenizer_UTF8 ()
 {
 	CSphString sTmp;
-	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
+	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE_2, sTmp );
 	m_bHasBlend = false;
 }
 
@@ -7006,6 +7007,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 // generic fallback; prone to races between seek and read
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 {
+
 	if ( sphSeek ( iFD, iOffset, SEEK_SET )==-1 )
 		return -1;
 
@@ -7111,10 +7113,12 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		}
 
 		m_iSizeHint = Max ( m_iReadUnhinted, iSize );
+		
 		UpdateCache ();
+		
 		if ( m_iBuffPos+iSize>m_iBuffUsed )
 		{
-			memset ( pData, 0, iSize ); // unexpected io failure
+			memset ( pData, 0, iSize ); // unexpected io failure	
 			return;
 		}
 	}
@@ -15074,7 +15078,6 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	// decode wordlist chunk
 	const BYTE * pBuf = pIndex->m_tWordlist.AcquireDict ( pCheckpoint );
 	assert ( pBuf );
-
 	CSphDictEntry tRes;
 	if ( bWordDict )
 	{
@@ -17042,7 +17045,7 @@ bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
 	int64_t iQueryStack = sphGetStackUsed() + iHeight*SPH_EXTNODE_STACK_SIZE;
 	bool bValid = ( g_iThreadStackSize>=iQueryStack );
 	if ( !bValid )
-		sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
+		sError.SetSprintf ( "sphCheckQueryHeight: query too complex, not enough stack (thread_stack=%dK or higher required)",
 			(int)( ( iQueryStack + 1024 - ( iQueryStack%1024 ) ) / 1024 ) );
 	return bValid;
 }
@@ -17826,11 +17829,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// non-random at the start, random at the end
 	dSorters.Sort ( CmpPSortersByRandom_fn() );
-
+sphWarn("fast path for scans");
 	// fast path for scans
 	if ( pQuery->m_sQuery.IsEmpty() )
 		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
-
+sphWarn("fast path for scans end");
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_DICT_SETUP );
 
@@ -17859,7 +17862,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	// parse query
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_PARSE );
-
+sphWarn("XQQuery_t tParsed");
 	XQQuery_t tParsed;
 	if ( !sphParseExtendedQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
 	{
@@ -17906,6 +17909,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
+	sphWarn("ParsedMultiQuery ( pQuery");
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
 
 	return bResult;
@@ -17918,6 +17922,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// ensure we have multiple queries
+sphWarn("CSphIndex_VLN::MultiQueryEx");
 	assert ( ppResults );
 	if ( iQueries==1 )
 		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, tArgs );
@@ -17943,6 +17948,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
+sphWarn("CSphIndex_VLN::MultiQueryEx:iQueries=%d",iQueries);
 	for ( int i=0; i<iQueries; i++ )
 	{
 		// nothing to do without a sorter
@@ -17951,6 +17957,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
 			continue;
 		}
+sphWarn("fast path for scans");
 
 		// fast path for scans
 		if ( pQueries[i].m_sQuery.IsEmpty() )
@@ -17963,7 +17970,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		}
 
 		ppResults[i]->m_tIOStats.Start();
-
+sphWarn("parse query");
 		// parse query
 		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &(pQueries[i]), m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
 		{
@@ -17981,7 +17988,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 			dStatChecker[i].Set ( ppResults[i]->m_hWordStats );
-
+sphWarn("expanding prefix in word dictionary case");
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads, pQueries[i].m_uDebugFlags );
 			if ( pPrefixed )
@@ -18011,10 +18018,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 		ppResults[i]->m_tIOStats.Stop();
 	}
-
+sphWarn("continue only if we have at least one non-failed");
 	// continue only if we have at least one non-failed
 	if ( bResult )
 	{
+		sphWarn("continue only if we have at least one non-failed: bResult");
 		int iCommonSubtrees = 0;
 		if ( m_iMaxCachedDocs && m_iMaxCachedHits )
 			iCommonSubtrees = sphMarkCommonSubtrees ( iQueries, &dXQ[0] );
@@ -18150,17 +18158,21 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
 
+	sphWarn("// setup query");
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
 	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, ppSorters[iMaxSchemaIndex]->GetSchema() ) );
 	if ( !pRanker.Ptr() )
+	{
+		sphWarn("!pRanker.Ptr()");
 		return false;
-
+	}
+sphWarn("tStatDiff.DumpDiffer");
 	tStatDiff.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && pQuery->m_eRanker!=SPH_RANK_EXPR )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
-
+sphWarn("tCtx.SetupExtraData");
 	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
 
 	PoolPtrs_t tMva;
@@ -18172,7 +18184,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int iMatchPoolSize = 0;
 	for ( int i=0; i<iSorters; i++ )
 		iMatchPoolSize += ppSorters[i]->m_iMatchCapacity;
-
+sphWarn("pRanker->ExtraData");
 	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
 	// check for the possible integer overflow in m_dPool.Resize
@@ -18231,7 +18243,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	//////////////////////////////////////
 	// find and weight matching documents
 	//////////////////////////////////////
-
+sphWarn("find and weight matching documents");
 	bool bFinalLookup = !tCtx.m_bLookupFilter && !tCtx.m_bLookupSort;
 	bool bFinalPass = bFinalLookup || tCtx.m_dCalcFinal.GetLength();
 	int iMyTag = bFinalPass ? -1 : tArgs.m_iTag;
@@ -18254,7 +18266,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	////////////////////
 	// cook result sets
 	////////////////////
-
+sphWarn("cook result sets");
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_FINALIZE );
 
@@ -30389,7 +30401,6 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 
 	assert ( !m_tBuf.IsEmpty() );
 	assert ( iOff>0 && iOff<=(int64_t)m_tBuf.GetLengthBytes() && iOff<(int64_t)m_tBuf.GetLengthBytes() );
-
 	return m_tBuf.GetWritePtr()+iOff;
 }
 

@@ -7050,7 +7050,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	//////////////////////
 	// search disk chunks
 	//////////////////////
-
+sphWarn("MultiQuery:search disk chunks");
 	pResult->m_bHasPrediction = pQuery->m_iMaxPredictedMsec>0;
 
 	SphWordStatChecker_t tDiskStat;
@@ -7133,7 +7133,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tMultiArgs.m_bLocalDF = bGotLocalDF;
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
 		tMultiArgs.m_iTotalDocs = iTotalDocs;
-
+		sphWarn("tGuard.m_dDiskChunks[iChunk]->MultiQuery");
 		if ( !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
@@ -7182,7 +7182,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			break;
 		}
 	}
-
+sphWarn("search RAM chunk");
 	////////////////////
 	// search RAM chunk
 	////////////////////
@@ -7722,12 +7722,13 @@ bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
+sphWarn("MultiQueryEx:iQueries=%d",iQueries);
 	for ( int i=0; i<iQueries; i++ )
 		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1;
-
+sphWarn("MultiQueryEx:iQueries end");
 	return bResult;
 }
 

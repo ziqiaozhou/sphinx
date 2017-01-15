@@ -1236,7 +1236,10 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 		? pDict->GetWordIDNonStemmed ( sTmp )
 		: pDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
+	
 	pWord->m_bExpanded = tWord.m_bExpanded;
+	
+sphWarn("CreateQueryWord: tWord.m_sWord.cstr()=%s,dictword=%s,uwordid= %d,m_sword=%s",tWord.m_sWord.cstr(), pWord->m_sDictWord.cstr(),pWord->m_uWordID,pWord->m_sWord.cstr());
 	tSetup.QwordSetup ( pWord );
 
 	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	pWord->m_iTermPos = TERM_POS_FIELD_STARTEND;
@@ -9179,6 +9182,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	SafeRelease ( pCached );
 
 	// setup eval-tree
+sphWarn("setup eval-tree");
+
 	ExtRanker_c * pRanker = NULL;
 	switch ( pQuery->m_eRanker )
 	{
@@ -9272,6 +9277,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	if ( tCtx.m_pLocalDocs )
 		iTotalDocuments = tCtx.m_iTotalDocs;
 
+	sphWarn("CSphVector<const ExtQword_t *> dWords");
+
 	CSphVector<const ExtQword_t *> dWords;
 	dWords.Reserve ( hQwords.GetLength() );
 
@@ -9336,21 +9343,24 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		tWord.m_fIDF = fIDF * tWord.m_fBoost;
 		dWords.Add ( &tWord );
 	}
-
+sphWarn("dWords.Sort ( ExtQwordOrderbyQueryPos_t() )");
 	dWords.Sort ( ExtQwordOrderbyQueryPos_t() );
+
+sphWarn("dWords.Sort ( ExtQwordOrderbyQueryPos_t() )");
 	ARRAY_FOREACH ( i, dWords )
 	{
 		const ExtQword_t * pWord = dWords[i];
 		if ( !pWord->m_bExpanded )
 			pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits );
 	}
-
+sphWarn("pRanker->m_iMaxQpos = iMaxQpos");
 	pRanker->m_iMaxQpos = iMaxQpos;
 	pRanker->SetQwordsIDF ( hQwords );
 	if ( bGotDupes )
 		pRanker->SetTermDupes ( hQwords, iMaxQpos );
 	if ( !pRanker->InitState ( tCtx, pResult->m_sError ) )
 		SafeDelete ( pRanker );
+	sphWarn("return sphCreateRanker");
 	return pRanker;
 }
 

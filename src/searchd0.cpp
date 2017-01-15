@@ -23,11 +23,12 @@
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "sphinxrlp.h"
-#include <klee/klee.h>
+
 extern "C"
 {
 #include "sphinxudf.h"
 }
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -102,12 +103,7 @@ extern "C"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-char query_word[5];
-int result_len;
-int new_sigaction(int signum, const struct  sigaction *act,
-			                      struct sigaction *oldact){
-	return 0;
-}
+
 enum ProtocolType_e
 {
 	PROTO_SPHINX = 0,
@@ -382,7 +378,6 @@ static bool				g_bIOStats		= false;
 static bool				g_bCpuStats		= false;
 static bool				g_bOptNoDetach	= false;
 static bool				g_bOptNoLock	= false;
-static bool g_runSymbolic =false;
 static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
@@ -664,7 +659,6 @@ ServedStats_c::~ServedStats_c()
 
 void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
 {
-#if 0
 	LockStats(false);
 
 	m_pRowsFoundDigest->Add ( (double)uFoundRows );
@@ -688,7 +682,6 @@ void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
 	m_uTotalQueries++;
 
 	UnlockStats();
-#endif
 }
 
 
@@ -1930,29 +1923,29 @@ void SetSignalHandlers ( bool bAllowCtrlC=false )
 	bool bSignalsSet = false;
 	for ( ;; )
 	{
-		sa.sa_handler = sigterm;	if ( new_sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
 		if ( !bAllowCtrlC )
 		{
 			sa.sa_handler = sigterm;
-			if ( new_sigaction ( SIGINT, &sa, NULL )!=0 )
+			if ( sigaction ( SIGINT, &sa, NULL )!=0 )
 				break;
 		}
-		sa.sa_handler = sighup;		if ( new_sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
-		sa.sa_handler = sigusr1;	if ( new_sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SIG_IGN;	if ( new_sigaction ( SIGPIPE, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
+		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) break;
 
 		sa.sa_flags |= SA_RESETHAND;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( new_sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( new_sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( new_sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( new_sigaction ( SIGILL, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( new_sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
+		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
 
 		bSignalsSet = true;
 		break;
 	}
 	if ( !bSignalsSet )
-		sphFatal ( "new_sigaction(): %s", strerror(errno) );
+		sphFatal ( "sigaction(): %s", strerror(errno) );
 }
 #endif
 
@@ -2091,7 +2084,7 @@ int sphCreateUnixSocket ( const char * sPath )
 	if ( len + 1 > sizeof( uaddr.sun_path ) )
 		sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
 
-	sphWarn ( "listening on UNIX socket %s", sPath );
+	sphInfo ( "listening on UNIX socket %s", sPath );
 
 	memset ( &uaddr, 0, sizeof(uaddr) );
 	uaddr.sun_family = AF_UNIX;
@@ -2427,7 +2420,6 @@ bool sphSockEof ( int iSock )
 
 	if ( FD_ISSET ( iSock, &fdrSet ) || FD_ISSET ( iSock, &fdeSet ) )
 #endif
-	  
 		if ( ::recv ( iSock, &cBuf, sizeof(cBuf), MSG_PEEK )<=0 )
 			if ( sphSockGetErrno()!=EWOULDBLOCK )
 				return true;
@@ -2502,9 +2494,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 			return -1;
 		}
 
-		// try to receive next chu
-		char tmpbuf[1024];
-		memset(tmpbuf,0,1024);
+		// try to receive next chunk
 		iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
 
 		// if there was eof, we're done
@@ -2530,9 +2520,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 			return -1;
 		}
 
-		//memcpy(pBuf,tmpbuf,iRes);
 		// update
-
 		pBuf += iRes;
 		iLeftBytes -= iRes;
 
@@ -2788,11 +2776,7 @@ void NetOutputBuffer_c::Flush ()
 			}
 		}
 	}
-	if(g_runSymbolic){
-		if(m_iSent==0){
-			m_iSent=m_dBuf.GetLength();
-		}
-	}
+
 	m_dBuf.Resize ( 0 );
 }
 
@@ -3880,7 +3864,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	{
 		tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
 		if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
-		  tQuery.m_sRankerExpr = tReq.GetString();
+			tQuery.m_sRankerExpr = tReq.GetString();
 	}
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
 	if ( iVer>=0x102 )
@@ -3888,28 +3872,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_sSortBy = tReq.GetString ();
 		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	}
-	if(g_runSymbolic){
-		klee_make_symbolic(query_word,sizeof(query_word),"query_word");
-		klee_assume(query_word[4]==0);
-		const char sMagics[] = "<\\()|-!@~\"&/^$=";
-		sphWarn("klee_run");	
-		for(int i=0;i<sizeof((query_word))-1;i++)
-		{
-			/*klee_assume(query_word[i]<128&& query_word[i]>=0);
-			for ( const char * s = sMagics; *s; s++ )
-			{
-				klee_assume(query_word[i]!=(*s));
-			}*/
-			klee_assume(query_word[i]<=122);
-			klee_assume(query_word[i]>=97);
-		}
-
-		klee_make_symbolic(&result_len,sizeof(result_len),"out_len");
-		tReq.GetString ();
-		tQuery.m_sRawQuery =query_word;// 
-	}else{
-		tQuery.m_sRawQuery=	tReq.GetString ();
-	}	//sphInfo("tQuery=%s",tQuery.m_sRawQuery.cstr());
+	tQuery.m_sRawQuery = tReq.GetString ();
+	sphInfo("tQuery=%s",tQuery.m_sRawQuery.cstr());
 	int iGot = 0;
 	if ( !tReq.GetDwords ( tQuery.m_dWeights, iGot, SPH_MAX_FIELDS ) )
 	{
@@ -4245,8 +4209,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 		if ( iMasterVer>0 || iVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
-		if(g_runSymbolic)
-		  tQuery.m_bNormalizedTFIDF=false;
+
 		// fetch optional stuff
 		if ( uFlags & QFLAG_MAX_PREDICTED_TIME )
 			tQuery.m_iMaxPredictedMsec = tReq.GetInt();
@@ -5606,8 +5569,6 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 		if ( bAgentMode )
 			tOut.SendByte ( false ); // statistics have no expanded terms for now
 	}
-
-
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7143,7 +7104,6 @@ void SearchHandler_c::RunQueries()
 	if ( bSameIndex )
 	{
 		// batch queries to same index
-	sphWarn("RunSubset");
 		RunSubset ( 0, m_dQueries.GetLength()-1 );
 		ARRAY_FOREACH ( i, m_dQueries )
 			LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i], m_iCid );
@@ -7305,10 +7265,9 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 		tPoolPtrs.m_pMva = tRes.m_pMva;
 		tPoolPtrs.m_pStrings = tRes.m_pStrings;
 		tPoolPtrs.m_bArenaProhibit = tRes.m_bArenaProhibit;
-		sphWarn("beofre sphFlattenQueue");
 		int iCopied = sphFlattenQueue ( pSorter, &tRes, iTag );
 		tRes.m_dMatchCounts.Add ( iCopied );
-sphWarn("end sphFlattenQueue");
+
 		// clean up for next index search
 		tRes.m_pMva = NULL;
 		tRes.m_pStrings = NULL;
@@ -7646,10 +7605,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 	}
 
 	CSphVector <int> dLocked;
-	sphWarn("m_dLocal.GetLength()=%d",m_dLocal.GetLength());
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
-		sphWarn("choose index=%d",iLocal);
 		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
 		const char * sParentIndex = m_dLocal[iLocal].m_sParentIndex.cstr();
 		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
@@ -7671,7 +7628,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		assert ( pServed->m_bEnabled );
 
 		// create sorters
-		sphWarn("create sorters");
 		CSphVector<ISphMatchSorter*> dSorters ( m_iEnd-m_iStart+1 );
 		ARRAY_FOREACH ( i, dSorters )
 			dSorters[i] = NULL;
@@ -7727,7 +7683,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		}
 
 		// if sorter schemes have dynamic part, its lengths should be the same for queries to be optimized
-		sphWarn("sorter schemes have dynamic part");
 		const ISphMatchSorter * pLastMulti = dSorters[0];
 		for ( int i=1; i<dSorters.GetLength() && m_bMultiQueue; i++ )
 		{
@@ -7787,7 +7742,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		}
 
 		// do the query
-		sphWarn("do the query");
 		CSphMultiQueryArgs tMultiArgs ( dKillist, iIndexWeight );
 		tMultiArgs.m_uPackedFactorFlags = uTotalFactorFlags;
 		if ( m_bGotLocalDF )
@@ -7800,13 +7754,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		bool bResult = false;
 		if ( m_bMultiQueue )
 		{
-			sphWarn("do the query: m_bMultiQueue");
 			tStats.m_tIOStats.Start();
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats, dSorters.GetLength(), dSorters.Begin(), tMultiArgs );
 			tStats.m_tIOStats.Stop();
 		} else
 		{
-			sphWarn("do the query:!m_bMultiQueue");
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
 			ARRAY_FOREACH ( i, m_dResults )
 			{
@@ -7814,13 +7766,12 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 				dResults[i]->m_pMva = NULL;
 				dResults[i]->m_pStrings = NULL;
 			}
-sphWarn("m_tIOStats.Start");
+
 			dResults[m_iStart]->m_tIOStats.Start();
-		sphWarn("pServed->m_pIndex->MultiQueryEx");
 			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(), &m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], tMultiArgs );
 			dResults[m_iStart]->m_tIOStats.Stop();
 		}
-sphWarn("handle results");
+
 		// handle results
 		if ( !bResult )
 		{
@@ -7831,7 +7782,6 @@ sphWarn("handle results");
 					: tStats.m_sError.cstr() );
 		} else
 		{
-		sphWarn("multi-query succeeded,m_iStart=%d,m_iEnd=%d",m_iStart,m_iEnd);
 			// multi-query succeeded
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 			{
@@ -7870,7 +7820,6 @@ sphWarn("handle results");
 
 				tRes.m_iSuccesses++;
 				// lets do this schema copy just once
-				sphWarn("lets do this schema copy just once");
 				tRes.m_tSchema = pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
@@ -7880,29 +7829,26 @@ sphWarn("handle results");
 				m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart].m_uFoundRows = pSorter->GetTotalCount();
 
 				// extract matches from sorter
-				sphWarn(" extract matches from sorter");
 				FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
 
 				if ( iBadRows )
 					RemoveMissedRows ( tRes );
-sphWarn("move external attributes storage from tStats to actual result");
+
 				// move external attributes storage from tStats to actual result
 				tStats.LeakStorages ( tRes );
 			}
 		}
-sphWarn("ReleaseIndex ");
+
 		ARRAY_FOREACH ( i, dLocked )
 			ReleaseIndex ( dLocked[i] );
-sphWarn("cleanup sorters");
+
 		dLocked.Resize ( 0 );
 
 		// cleanup sorters
 		if ( !pLocalSorter )
 			ARRAY_FOREACH ( i, dSorters )
 				SafeDelete ( dSorters[i] );
-	sphWarn("after safe delete");
 	}
-	sphWarn("end RunLocalSearches");
 }
 
 
@@ -8221,7 +8167,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	////////////////////////////
 	// build local indexes list
 	////////////////////////////
-sphWarn("build local indexes list");
+
 	CSphVector<AgentConn_t> dAgents;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
@@ -8375,7 +8321,7 @@ sphWarn("build local indexes list");
 	/////////////////////////////////////////////////////
 	// optimize single-query, same-schema local searches
 	/////////////////////////////////////////////////////
-sphWarn("optimize single-query, same-schema local searches");
+
 	DWORD uLocalPFFlags = SPH_FACTOR_DISABLE;
 	ISphMatchSorter * pLocalSorter = NULL;
 	while ( iStart==iEnd && m_dLocal.GetLength()>1 )
@@ -8446,7 +8392,7 @@ sphWarn("optimize single-query, same-schema local searches");
 	///////////////////////////////////////////////////////////
 	// main query loop (with multiple retries for distributed)
 	///////////////////////////////////////////////////////////
-sphWarn("main query loop");
+
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( NULL );
@@ -8465,7 +8411,7 @@ sphWarn("main query loop");
 	/////////////////////
 	// run local queries
 	//////////////////////
-sphWarn("run local queries");
+
 	// while the remote queries are running, do local searches
 	// FIXME! what if the remote agents finish early, could they timeout?
 	if ( m_dLocal.GetLength() )
@@ -8476,9 +8422,7 @@ sphWarn("run local queries");
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
-	sphWarn("run local queries: RunLocalSearches");
 		RunLocalSearches ( pLocalSorter, uLocalPFFlags );
-		sphWarn("run local queries: RunLocalSearches end");
 		tmLocal += sphMicroTimer();
 	}
 
@@ -8637,7 +8581,7 @@ sphWarn("run local queries");
 	/////////////////////
 	// merge all results
 	/////////////////////
-sphWarn("merge all results");
+
 	if ( m_pProfile )
 		m_pProfile->Switch ( SPH_QSTATE_AGGREGATE );
 
@@ -8912,7 +8856,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, i
 	// serve the response
 	int iReplyLen = 0;
 	bool bAgentMode = ( iMasterVer>0 );
-sphWarn("send search response");
+
 	if ( iVer<=0x10C )
 	{
 		assert ( tHandler.m_dQueries.GetLength()==1 );
@@ -8933,8 +8877,6 @@ sphWarn("send search response");
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-
-
 		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgentMode, tHandler.m_dQueries[0], iMasterVer );
 
 	} else
@@ -8947,16 +8889,11 @@ sphWarn("send search response");
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		ARRAY_FOREACH ( i, tHandler.m_dQueries ){
+		ARRAY_FOREACH ( i, tHandler.m_dQueries )
 			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, tHandler.m_dQueries[i], iMasterVer );
-		}
 	}
 
-sphWarn("tout length=%d,%d",tOut.GetSentCount(),tOut.m_dBuf.GetLength());
-if(!g_runSymbolic){	
-tOut.Flush ();
-}
-sphWarn("tout length=%d,%d",tOut.GetSentCount(),tOut.m_dBuf.GetLength());
+	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iReplyLen+8 );
 }
 
@@ -9000,11 +8937,9 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	// run queries, send response
-	sphWarn("tHandler.RunQueries()");
 	tHandler.RunQueries();
-sphWarn("SendSearchResponse");
-		SendSearchResponse ( tHandler, tOut, iVer, iMasterVer );
-sphWarn("send SearchResponse end");
+	SendSearchResponse ( tHandler, tOut, iVer, iMasterVer );
+
 	int64_t iTotalPredictedTime = 0;
 	int64_t iTotalAgentPredictedTime = 0;
 	ARRAY_FOREACH ( i, tHandler.m_dResults )
@@ -9013,14 +8948,12 @@ sphWarn("send SearchResponse end");
 		iTotalAgentPredictedTime += tHandler.m_dResults[i].m_iAgentPredictedTime;
 	}
 
-	sphWarn("send Search Response end1");
-/*	g_tLastMetaMutex.Lock();
+	g_tLastMetaMutex.Lock();
 	g_tLastMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength()-1];
 	g_tLastMetaMutex.Unlock();
 
 	g_tStats.m_iPredictedTime += iTotalPredictedTime;
 	g_tStats.m_iAgentPredictedTime += iTotalAgentPredictedTime;
-*/	sphWarn("send Search Response end2");
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -9686,8 +9619,6 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 				return false;
 			}
 		}
-		if(g_runSymbolic)
-		  m_pQuery->m_bNormalizedTFIDF = false;
 	} else if ( sOpt=="global_idf" )
 	{
 		m_pQuery->m_bGlobalIDF = ( tValue.m_iValue!=0 );
@@ -12249,23 +12180,10 @@ bool LoopClientSphinx ( int iCommand, int iCommandVer, int iLength, const char *
 
 	logfile<<"got command"<<sClientIP<<",icid="<<iCID<<",icommand="<<iCommand<<"\n";
 logfile.close();
-switch ( iCommand )
-{
-	case SEARCHD_COMMAND_SEARCH:	{
-										HandleCommandSearch ( tOut, iCommandVer, tBuf, pThd ); 
-										sphWarn("end HandleCommandSearc");	
-										if(g_runSymbolic){
-											result_len=(tOut.GetSentCount()>tOut.m_dBuf.GetLength())?tOut.GetSentCount():tOut.m_dBuf.GetLength();
-
-											sphWarn("end HandleCommandSearch2");	
-											klee_make_observable("(ReadLSB w32 0 out_len)",result_len);
-											exit(0); 
-										}else{
-											sphWarn("result_len=%d",result_len);
-										}
-										break;
-									}
-	case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, iCommandVer, tBuf, pThd ); break;
+	switch ( iCommand )
+	{
+		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, iCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, iCommandVer, tBuf, pThd ); break;
 		case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( tOut, iCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( tOut, iCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST:
@@ -18012,7 +17930,6 @@ bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, co
 	CSphString sError;
 	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
 	{
-	fprintf(stdout,"index locl\n");
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
@@ -18020,8 +17937,6 @@ bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, co
 	// try to lock it
 	if ( !g_bOptNoLock && !tIdx.m_pIndex->Lock() )
 	{
-		fprintf(stdout,"index locl\n");
-		fflush(stdout);
 		sphWarning ( "index '%s': lock: %s; NOT SERVING", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
 		return false;
 	}
@@ -19588,6 +19503,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 		struct sockaddr_storage saStorage;
 		socklen_t uLength = sizeof(saStorage);
 		int iClientSock = accept ( g_dListeners[i].m_iSock, (struct sockaddr *)&saStorage, &uLength );
+
 		// handle failures
 		if ( iClientSock<0 )
 		{
@@ -19625,6 +19541,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 			if ( saStorage.ss_family==AF_UNIX )
 				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );
 		}
+
 		// accepted!
 #if !USE_WINDOWS && !HAVE_POLL
 		// when there is no poll(), we use select(),
@@ -19711,6 +19628,7 @@ void TickHead ()
 	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
 	if ( !pListener )
 		return;
+
 	if ( ( g_iMaxChildren && !g_pThdPool && g_dThd.GetLength()>=g_iMaxChildren )
 		|| ( g_bInRotate && !g_bSeamlessRotate ) )
 	{
@@ -19730,25 +19648,22 @@ void TickHead ()
 	pThd->m_sClientName = sClientName;
 	pThd->m_iConnID = g_iConnectionID;
 	pThd->m_tmConnect = sphMicroTimer();
+
 	g_tThdMutex.Lock ();
 	g_dThd.Add ( pThd );
 	g_tThdMutex.Unlock ();
-	if(g_iMaxChildren>0){
-		if (  !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
-		{
-			sphSockClose ( iClientSock );
-			int iErr = errno;
-			g_tThdMutex.Lock ();
-			g_dThd.Remove ( pThd );
-			g_tThdMutex.Unlock ();
-			SafeDelete ( pThd );
 
-			FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
-			sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
-		}}
-	else if(g_iMaxChildren==0){
-		sphWarn("not thread");
-		HandlerThread(pThd);
+	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
+	{
+		sphSockClose ( iClientSock );
+		int iErr = errno;
+		g_tThdMutex.Lock ();
+		g_dThd.Remove ( pThd );
+		g_tThdMutex.Unlock ();
+		SafeDelete ( pThd );
+
+		FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
+		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
 	}
 }
 
@@ -20331,7 +20246,6 @@ public:
 			assert ( m_iReadFD!=-1 );
 			uint64_t uVal = 0;
 #if HAVE_EVENTFD
-			
 			::read ( m_iReadFD, &uVal, sizeof ( uVal ) );
 #else
 			// socket-pair case might stack up some values and these should be read
@@ -22413,7 +22327,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 			ServedIndex_c & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
 			iCounter++;
 
-			fprintf ( stdout, "precaching an index '%s'\n", sIndexName );
+			fprintf ( stdout, "precaching index '%s'\n", sIndexName );
 			fflush ( stdout );
 
 			if ( HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) ) )
@@ -22424,62 +22338,42 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 				{
 					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hIndex, sError ) )
 					{
-						fprintf ( stdout, "precaching not serving\n" );
-						fflush ( stdout );
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
 						tIndex.m_bEnabled = false;
 					}
 				} else
 				{
-					fprintf ( stdout, "precaching err\n" );
-					fflush ( stdout );
 					sphWarning ( "%s", sError.cstr() );
 					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
 						tIndex.m_bEnabled = true;
 				}
 			} else
 			{
-				fprintf ( stdout, "precaching err else\n" );
-				fflush ( stdout );
 				tIndex.m_bOnlyNew = false;
 				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
-						tIndex.m_bEnabled = true;
+					tIndex.m_bEnabled = true;
 			}
 
 			if ( !tIndex.m_bEnabled )
-			{
-				fprintf ( stdout, "precaching an index _bIEnabled\n" );
-				fflush ( stdout );
 				continue;
-			}
+
 			CSphString sError;
 			if ( !tIndex.m_sGlobalIDFPath.IsEmpty() )
 				if ( !sphPrereadGlobalIDF ( tIndex.m_sGlobalIDFPath, sError ) )
 					sphWarning ( "index '%s': global IDF unavailable - IGNORING", sIndexName );
-
 		}
 
 		if ( eAdd!=ADD_ERROR )
 			iValidIndexes++;
 	}
 
-fprintf (stdout, "end1 precaching\n");
-fflush(stdout);	
-
 	InitPersistentPool();
 
-fprintf (stdout, "end2 precaching\n");
-fflush(stdout);	
-
 	tmLoad += sphMicroTimer();
-	if ( !iValidIndexes ){
-	sphFatal ( "no valid indexes to serve" );
-	}else
+	if ( !iValidIndexes )
+		sphFatal ( "no valid indexes to serve" );
+	else
 		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter-1, float(tmLoad)/1000000 );
-
-fprintf (stdout, "end precaching2\n");
-fflush(stdout);	
-
 }
 
 void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
@@ -22615,7 +22509,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
-		OPT1("--symbol")			g_runSymbolic=true;
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
@@ -22733,8 +22626,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	sphInfo ( "using config file '%s'...", g_sConfigFile.cstr () );
 
 	CheckConfigChanges ();
-	fprintf(stdout,"parse\n");
-	fflush(stdout);
+
 	// do parse
 	if ( !g_pCfg.Parse ( g_sConfigFile.cstr () ) )
 		sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
@@ -22870,7 +22762,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 			// reading data
 			DWORD uStatus = 0;
-			
 			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
 			if ( iRead!=sizeof(DWORD) )
 			{
@@ -23209,7 +23100,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	/////////////////
 	// serve clients
 	/////////////////
-sphWarn("before bthdPool");
+
 	if ( bThdPool )
 	{
 		g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
@@ -23224,19 +23115,17 @@ sphWarn("before bthdPool");
 		g_pThdPool = sphThreadPoolCreate ( g_iThdPoolCount, sSemName );
 #endif
 	}
-sphWarn("after bthdPool");
 #if USE_WINDOWS
 	if ( g_bService )
 		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
 #endif
 
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
-/*
-sphWarn("before g_tRotateThread");
+
 	// in threaded mode, create a dedicated rotation thread
 	if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation thread" );
-*/
+
 	// replay last binlog
 	SmallStringHash_T<CSphIndex*> hIndexes;
 	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
@@ -23250,16 +23139,15 @@ sphWarn("before g_tRotateThread");
 		sphWarning ( "unable to init IO statistics" );
 
 	g_tStats.m_uStarted = (DWORD)time(NULL);
-/*
-	sphWarn("before g_tRtFlushThread");
+
 	// threads mode
 	// create optimize and flush threads, and load saved sphinxql state
 	if ( !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
 		sphDie ( "failed to create rt-flush thread" );
-sphWarn("before g_tOptimizeThread");
+
 	if ( !sphThreadCreate ( &g_tOptimizeThread, OptimizeThreadFunc, 0 ) )
 		sphDie ( "failed to create optimize thread" );
-*/
+
 	g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 	if ( !g_sSphinxqlState.IsEmpty() )
 	{
@@ -23280,22 +23168,21 @@ sphWarn("before g_tOptimizeThread");
 		else if ( !sphThreadCreate ( &g_tSphinxqlStateFlushThread, SphinxqlStateThreadFunc, NULL ) )
 			sphDie ( "failed to create sphinxql_state writer thread" );
 	}
-/*
-sphWarn("before g_tRotationServiceThread");
+
 	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation service thread" );
 
 	if ( !sphThreadCreate ( &g_tPingThread, PingThreadFunc, 0 ) )
 		sphDie ( "failed to create ping service thread" );
-*/
+
 	if ( bForcedPreread )
 	{
 		PrereadFunc ( NULL );
 	} else
 	{
 		SphThread_t tTmpPreread;
-		/*if ( !sphThreadCreate ( &tTmpPreread, PrereadFunc, 0, true ) )
-			sphWarning ( "failed to create preread thread" );*/
+		if ( !sphThreadCreate ( &tTmpPreread, PrereadFunc, 0, true ) )
+			sphWarning ( "failed to create preread thread" );
 	}
 
 	// almost ready, time to start listening
@@ -23303,7 +23190,7 @@ sphWarn("before g_tRotationServiceThread");
 	ARRAY_FOREACH ( j, g_dListeners )
 		if ( listen ( g_dListeners[j].m_iSock, g_iBacklog )==-1 )
 			sphFatal ( "listen() failed: %s", sphSockError() );
-sphWarn("before non-blocking sockets");
+
 	if ( g_pThdPool )
 	{
 		// net thread needs non-blocking sockets
@@ -23323,7 +23210,7 @@ sphWarn("before non-blocking sockets");
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}
-sphWarn("after non-blocking sockets");
+
 	// crash logging for the main thread (for --console case)
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
@@ -23371,9 +23258,7 @@ int main ( int argc, char **argv )
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
 
-		
-	//klee_alias_function("new_sigaction","new_new_sigaction");
-		sphSetDieCallback ( DieCallback );
+	sphSetDieCallback ( DieCallback );
 	sphSetLogger ( sphLog );
 	g_pUservarsHook = UservarsHook;
 	sphCollationInit ();

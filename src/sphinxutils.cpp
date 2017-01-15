@@ -1772,9 +1772,10 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 
 static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( eLevel>=SPH_LOG_DEBUG )
-		return;
 
+	if ( eLevel>=SPH_LOG_DEBUG )
+	{		return;
+	}
 	switch ( eLevel )
 	{
 	case SPH_LOG_FATAL: fprintf ( stdout, "FATAL: " ); break;
@@ -1785,16 +1786,18 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	case SPH_LOG_VERY_VERBOSE_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
 	}
 
-	vfprintf ( stdout, sFmt, ap );
-	fprintf ( stdout, "\n" );
 }
 
 static SphLogger_fn g_pLogger = &StdoutLogger;
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( !g_pLogger ) return;
-	( *g_pLogger ) ( eLevel, sFmt, ap );
+	if ( !g_pLogger ){
+		return;
+	}
+StdoutLogger ( eLevel, sFmt, ap );
+
+fflush(stdout);
 }
 
 void sphWarning ( const char * sFmt, ... )
@@ -1808,11 +1811,18 @@ void sphWarning ( const char * sFmt, ... )
 
 void sphInfo ( const char * sFmt, ... )
 {
+		va_list ap;
+	va_start ( ap, sFmt );
+	fprintf ( stdout, "WARNING: " );
+	vfprintf ( stdout, sFmt, ap );
+	fprintf ( stdout, "\n" );
+	va_end ( ap );
+/*
 	va_list ap;
 	va_start ( ap, sFmt );
 	Log ( SPH_LOG_INFO, sFmt, ap );
 	va_end ( ap );
-}
+*/}
 
 void sphLogFatal ( const char * sFmt, ... )
 {

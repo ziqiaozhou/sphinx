@@ -27,7 +27,7 @@
 
 #endif
 
-int g_iThreadStackSize = 1024*1024;
+int g_iThreadStackSize = 1008665*1024;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -958,12 +958,16 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	void * pAttr = sphThreadInit ( bDetached );
 	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, sphThreadProcWrapper, pCall );
 
-#if USE_GPROF
+#if USE_GPROF && !defined(__clang__)
 	if ( !errno )
 		pthread_cond_wait ( &pCall->m_dwait, &pCall->m_dlock );
 
 	pthread_mutex_unlock ( &pCall->m_dlock );
+	#if !defined(__clang__)
+	sphWarn("pthread_mutex_destroy USE_GPROF ");
+
 	pthread_mutex_destroy ( &pCall->m_dlock );
+#endif
 	pthread_cond_destroy ( &pCall->m_dwait );
 #endif
 
@@ -1030,6 +1034,9 @@ void * sphThreadGet ( SphThreadKey_t tKey )
 #if USE_WINDOWS
 	return TlsGetValue ( tKey );
 #else
+void * result=pthread_getspecific ( tKey );
+	sphWarn("get key:%d=%lx",tKey,result);
+	return result;
 	return pthread_getspecific ( tKey );
 #endif
 }
@@ -1068,6 +1075,7 @@ bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
 #if USE_WINDOWS
 	return TlsSetValue ( tKey, pValue )!=FALSE;
 #else
+	sphWarn("key:%d = %lx",tKey,pValue);
 	return pthread_setspecific ( tKey, pValue )==0;
 #endif
 }
@@ -1213,9 +1221,12 @@ CSphMutex::CSphMutex()
 
 CSphMutex::~CSphMutex()
 {
+#if !defined(__clang__)
+	sphWarn("pthread_mutex_destroy CSphMutex");
 	if ( pthread_mutex_destroy ( m_pMutex ) )
 		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
 	SafeDelete ( m_pMutex );
+#endif
 }
 
 bool CSphMutex::Lock ()
