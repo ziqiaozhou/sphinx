@@ -17,7 +17,7 @@
 #define _sphinx_
 
 /////////////////////////////////////////////////////////////////////////////
-
+#define SYMBOLIC 1
 #ifdef _WIN32
 	#define USE_MYSQL		1	/// whether to compile MySQL support
 	#define USE_PGSQL		0	/// whether to compile PgSQL support

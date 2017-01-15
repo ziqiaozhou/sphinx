@@ -2625,7 +2625,8 @@ public:
 		int iFlags = MAP_ANON | MAP_PRIVATE;
 		if ( SHARED )
 			iFlags = MAP_ANON | MAP_SHARED;
-
+		sphWarn("allocate %d byte",iLength);
+		iLength=iLength/2;
 		T * pData = (T *) mmap ( NULL, iLength, PROT_READ | PROT_WRITE, iFlags, -1, 0 );
 		if ( pData==MAP_FAILED )
 		{
@@ -2781,7 +2782,7 @@ public:
 
 			if ( bWrite )
 				iProt |= PROT_WRITE;
-
+			
 			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
@@ -3266,7 +3267,7 @@ public:
 //////////////////////////////////////////////////////////////////////////
 // interlocked (atomic) operation
 
-#if (USE_WINDOWS) || (HAVE_SYNC_FETCH)
+#if ((USE_WINDOWS) || (HAVE_SYNC_FETCH) ) && defined(__clang__)
 #define NO_ATOMIC 0
 #else
 #define NO_ATOMIC 1
@@ -3276,7 +3277,7 @@ template<typename TLONG>
 class CSphAtomic_T : public ISphNoncopyable
 {
 	volatile mutable TLONG	m_iValue;
-#if NO_ATOMIC
+#if NO_ATOMIC || defined(__clang__)
 	mutable CSphMutex		m_tLock;
 #endif
 
@@ -3336,7 +3337,8 @@ public:
 	}
 
 
-#ifdef HAVE_SYNC_FETCH
+#ifdef HAVE_SYNC_FETCH 
+#ifndef __clang__
 	TLONG GetValue () const
 	{
 		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
@@ -3394,8 +3396,8 @@ public:
 	void SetValue ( TLONG iValue );
 	TLONG CAS ( TLONG, TLONG );
 #endif
-
-#if NO_ATOMIC
+#endif
+#if NO_ATOMIC ||  __clang__
 	TLONG GetValue () const NO_THREAD_SAFETY_ANALYSIS
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );

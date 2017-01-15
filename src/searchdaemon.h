@@ -235,7 +235,8 @@ public:
 	virtual int		GetSentCount () const { return m_dBuf.GetLength(); }
 	virtual void	SetProfiler ( CSphQueryProfile * ) {}
 
-protected:
+//protected:
+public:
 	CSphVector<BYTE>	m_dBuf;
 
 private:
