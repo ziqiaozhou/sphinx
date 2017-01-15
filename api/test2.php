@@ -14,7 +14,7 @@ $docs = array
 	"final test, not only without phrase match, but also above limit and with swapped phrase text test as well",
 );
 $words = "test text";
-$index = "test1";
+$index = "simplecomplete";
 $opts = array
 (
 	"before_match"		=> "<b>",

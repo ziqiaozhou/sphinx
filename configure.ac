@@ -202,9 +202,8 @@ AC_CACHE_CHECK([for interlocked builtins], [sphinx_cv_interlocked],
 
 # final check
 if test x$sphinx_cv_interlocked = xyes; then
-    AC_DEFINE(HAVE_SYNC_FETCH,1,[Whether we have internal atomic functions])
+    AC_DEFINE(HAVE_SYNC_FETCH,0,[Whether we have internal atomic functions])
 fi
-
 dnl --------------------------------------------------------------------------
 
 SPHINX_CONFIGURE_PART([configuring Sphinx])

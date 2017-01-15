@@ -784,7 +784,10 @@ static int sphinx_done_func ( void * )
 		if ( sphinx_open_tables.records )
 			error = 1;
 		sphinx_hash_free ( &sphinx_open_tables );
+#if !defined(__clang__)
+	sphWarn("pthread_mutex_destroy sphinx_done_func");
 		pthread_mutex_destroy ( &sphinx_mutex );
+#endif
 	}
 
 	SPH_RET(0);
